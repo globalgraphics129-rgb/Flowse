@@ -1,0 +1,226 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&family=DM+Serif+Display&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@theme {
+  --color-natural: var(--bg-natural);
+  --color-natural-text: var(--text-natural);
+  --color-cream: var(--cream);
+  --color-border-soft: var(--border-soft);
+  --color-sage: var(--sage);
+  --color-clay: var(--clay);
+  --color-moss: var(--moss);
+  
+  --font-sans: 'Poppins', ui-sans-serif, system-ui, sans-serif;
+  --font-serif-display: 'Poppins', sans-serif;
+  --font-sans-dm: 'Poppins', sans-serif;
+}
+
+@layer base {
+  :root {
+    --bg-natural: #030C0A;
+    --text-natural: #E2ECE9;
+    --cream: #081A15;
+    --border-soft: #12332A;
+    --sage: #1ebd7d;
+    --clay: #EE765D;
+    --moss: #10B981;
+  }
+  
+  :root.theme-light {
+    --bg-natural: #F6FBF9;
+    --text-natural: #0B1915;
+    --cream: #FFFFFF;
+    --border-soft: #DFEDE8;
+    --sage: #109D64;
+    --clay: #DF5D42;
+    --moss: #0E9F6E;
+  }
+  
+  :root.theme-dark {
+    --bg-natural: #030C0A;
+    --text-natural: #E2ECE9;
+    --cream: #081A15;
+    --border-soft: #12332A;
+    --sage: #1ebd7d;
+    --clay: #EE765D;
+    --moss: #10B981;
+  }
+}
+
+body {
+  background-color: var(--bg-natural);
+  color: var(--text-natural);
+  font-family: 'Poppins', sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.bg-natural {
+  background-color: var(--bg-natural);
+}
+
+.text-natural {
+  color: var(--text-natural);
+}
+
+.bg-cream {
+  background-color: var(--cream);
+}
+
+.border-soft {
+  border-color: var(--border-soft);
+}
+
+.bg-sage {
+  background-color: var(--sage);
+}
+
+.accent-sage {
+  background-color: var(--sage);
+}
+
+.text-sage {
+  color: var(--sage);
+}
+
+.border-sage {
+  border-color: var(--border-soft);
+}
+
+.bg-clay {
+  background-color: var(--clay);
+}
+
+.accent-clay {
+  background-color: var(--clay);
+}
+
+.text-clay {
+  color: var(--clay);
+}
+
+.border-clay {
+  border-color: var(--clay);
+}
+
+.bg-moss {
+  background-color: var(--moss);
+}
+
+.accent-moss {
+  background-color: var(--moss);
+}
+
+.text-moss {
+  color: var(--moss);
+}
+
+.card-natural {
+  background: var(--cream);
+  border: 1px solid var(--border-soft);
+  border-radius: 28px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root:not(.theme-light) .card-natural {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+
+.card-natural:hover {
+  border-color: var(--sage);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.25);
+}
+
+:root:not(.theme-light) .card-natural:hover {
+  border-color: #1a4a3c;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.55);
+}
+
+.font-serif-display {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+}
+
+.font-sans-dm {
+  font-family: 'Poppins', sans-serif;
+}
+
+@keyframes spin-slow {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 0.8; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2s ease-in-out infinite;
+}
+
+/* Custom scrollbar matching dark emerald theme */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #040D0A;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #12332A;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #1ebd7d;
+}
+
+/* Customizing Native browser elements to look premium, not raw/default */
+input[type="date"] {
+  position: relative;
+  font-family: 'Poppins', sans-serif;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  background-color: transparent;
+  cursor: pointer;
+  filter: invert(0.5) sepia(1) saturate(5) hue-rotate(110deg);
+  opacity: 0.85;
+  transition: opacity 0.2s ease;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+:root.theme-light input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.3) sepia(1) saturate(3) hue-rotate(110deg) brightness(0.6);
+}
+
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%231ebd7d' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+  background-position: right 1rem center;
+  background-repeat: no-repeat;
+  background-size: 1.25em auto;
+  padding-right: 2.5rem !important;
+}
+
+:root.theme-light select {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%23109D64' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+}
+
+select option {
+  background-color: var(--cream);
+  color: var(--text-natural);
+  padding: 12px;
+  font-family: 'Poppins', sans-serif;
+}
+

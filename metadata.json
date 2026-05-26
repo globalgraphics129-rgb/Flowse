@@ -1,0 +1,6 @@
+{
+  "name": "Flowse",
+  "description": "A premium, secure, and offline-first budget and expense tracker with local PIN lock security and data backup options.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
