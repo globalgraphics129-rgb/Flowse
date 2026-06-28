@@ -60,6 +60,9 @@ import PlaygroundPage from './components/PlaygroundPage';
 import ImageCropperModal from './components/ImageCropperModal';
 import InteractiveTour from './components/InteractiveTour';
 import { generateStatementPDF } from './utils/pdfGenerator';
+import { Capacitor } from '@capacitor/core';
+import { StatusBar, Style } from '@capacitor/status-bar';
+import { SplashScreen } from '@capacitor/splash-screen';
 
 export default function App() {
   // Navigation & Screen Control
@@ -136,6 +139,23 @@ export default function App() {
     }, 1500);
     return () => clearTimeout(timer);
   }, []);
+
+  // Handle Capacitor native splash screen hide
+  useEffect(() => {
+    if (!appBooting && Capacitor.isNativePlatform()) {
+      SplashScreen.hide().catch(err => console.warn('Splash hide error', err));
+    }
+  }, [appBooting]);
+
+  // Handle Capacitor native status bar coloring and style cycle
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      StatusBar.setStyle({ style: resolvedTheme === 'dark' ? Style.Dark : Style.Light })
+        .catch(err => console.warn('StatusBar style error', err));
+      StatusBar.setBackgroundColor({ color: resolvedTheme === 'dark' ? '#030C0A' : '#F6FBF9' })
+        .catch(err => console.warn('StatusBar bg error', err));
+    }
+  }, [resolvedTheme]);
 
   // App Database State
   const [transactions, setTransactions] = useState<Transaction[]>([]);
