@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Download, ArrowRight, Shield, Activity, TrendingUp, Cpu, Menu, X, PiggyBank, RefreshCw } from 'lucide-react';
+import { Download, ArrowRight, Shield, Activity, TrendingUp, Cpu, Menu, X, PiggyBank, RefreshCw, Check } from 'lucide-react';
 
 interface LandingPageProps {
   onLaunchApp: () => void;
