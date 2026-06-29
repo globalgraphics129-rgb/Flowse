@@ -10,6 +10,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout Source Code
@@ -66,3 +68,16 @@ jobs:
             vite_build.log
             cap_sync.log
             android/gradle_build.log
+
+      - name: Push Logs to debug-logs branch on Failure
+        if: failure()
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git checkout -b debug-logs || (git fetch origin debug-logs && git checkout debug-logs)
+          cp vite_build.log vite_build.log.txt || true
+          cp cap_sync.log cap_sync.log.txt || true
+          cp android/gradle_build.log gradle_build.log.txt || true
+          git add vite_build.log.txt cap_sync.log.txt gradle_build.log.txt || true
+          git commit -m "debug: dump logs on failure" || true
+          git push -f origin debug-logs
