@@ -30,8 +30,15 @@ jobs:
       - name: Install Node Dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Compile and Sync Capacitor Web Assets
-        run: npm run build:android
+      - name: Compile Web Assets
+        run: |
+          npm run build > vite_build.log 2>&1 || (cat vite_build.log && exit 1)
+          cat vite_build.log
+
+      - name: Sync Capacitor Plugins and Assets
+        run: |
+          npx cap sync --verbose > cap_sync.log 2>&1 || (cat cap_sync.log && exit 1)
+          cat cap_sync.log
 
       - name: Set up Gradle Cache
         uses: gradle/actions/setup-gradle@v3
@@ -40,10 +47,22 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug > gradle_build.log 2>&1 || (cat gradle_build.log && exit 1)
+          cat gradle_build.log
 
       - name: Upload Debug APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Flowse-Debug-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload Build Logs on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Build-Failure-Logs
+          path: |
+            vite_build.log
+            cap_sync.log
+            android/gradle_build.log
