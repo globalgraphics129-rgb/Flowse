@@ -708,7 +708,7 @@ export default function App() {
     if (!startedOnboarding) {
       return <LandingPage onLaunchApp={() => setStartedOnboarding(true)} />;
     }
-    return <Onboarding onComplete={handleOnboardComplete} />;
+    return <Onboarding onComplete={handleOnboardComplete} onBack={() => setStartedOnboarding(false)} />;
   }
 
   // Security Screen PIN check Branch

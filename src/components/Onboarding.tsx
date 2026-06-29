@@ -13,6 +13,7 @@ interface OnboardingProps {
       recurringTransactions: any[];
     }
   ) => void;
+  onBack?: () => void;
 }
 
 export default function Onboarding({ onComplete }: OnboardingProps) {
@@ -500,6 +501,15 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
         <p className="text-[10px] text-[#506e64] font-semibold">
           Flowse Secure Wallet Onboarding. Offline-First Ledgers.
         </p>
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="text-[10px] text-[#8c9e99] hover:text-[#1ebd7d] underline underline-offset-4 mt-2 transition-colors cursor-pointer block mx-auto font-bold uppercase tracking-wider"
+          >
+            ← Back to Home
+          </button>
+        )}
       </div>
     </div>
   );
