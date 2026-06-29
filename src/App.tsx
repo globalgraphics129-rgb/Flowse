@@ -163,6 +163,64 @@ export default function App() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [recurringTransactions, setRecurringTransactions] = useState<RecurringTransaction[]>([]);
 
+  // Cloud Sync State
+  const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'error' | 'offline'>('synced');
+
+  const syncLedger = async (
+    currentProfile: UserProfile | null,
+    currentTransactions: Transaction[],
+    currentBudgets: Budget[],
+    currentGoals: Goal[],
+    currentRecurring: RecurringTransaction[]
+  ) => {
+    if (!currentProfile || !currentProfile.email || !currentProfile.pin) {
+      return;
+    }
+    setSyncStatus('syncing');
+    try {
+      const getApiUrl = (path: string) => {
+        const isCapacitor = window.location.origin.startsWith('capacitor://') || (window.location.origin.startsWith('http://localhost') && window.location.port === '');
+        if (isCapacitor) {
+          return `http://localhost:5000/api${path}`;
+        }
+        return `/api${path}`;
+      };
+
+      const response = await fetch(getApiUrl('/data/sync'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: currentProfile.email,
+          pin: currentProfile.pin,
+          data: {
+            profile: currentProfile,
+            transactions: currentTransactions,
+            budgets: currentBudgets,
+            goals: currentGoals,
+            recurringTransactions: currentRecurring
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Sync failed');
+      }
+      setSyncStatus('synced');
+    } catch (err) {
+      console.warn('Sync failed:', err);
+      setSyncStatus('error');
+    }
+  };
+
+  // Debounced auto-sync effect
+  useEffect(() => {
+    if (!profile) return;
+    const timer = setTimeout(() => {
+      syncLedger(profile, transactions, budgets, goals, recurringTransactions);
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [profile, transactions, budgets, goals, recurringTransactions]);
+
   // Modals Controller
   const [showAddTxModal, setShowAddTxModal] = useState<boolean>(false);
   const [showAddBudgetModal, setShowAddBudgetModal] = useState<boolean>(false);
@@ -320,19 +378,34 @@ export default function App() {
     localStorage.setItem('flowse_recurring_react', JSON.stringify(newList));
   };
 
-  const handleOnboardComplete = (completedProfile: UserProfile) => {
+  const handleOnboardComplete = (
+    completedProfile: UserProfile,
+    restoredData?: {
+      transactions: Transaction[];
+      budgets: Budget[];
+      goals: Goal[];
+      recurringTransactions: RecurringTransaction[];
+    }
+  ) => {
     setProfile(completedProfile);
     setPinVerified(true);
     localStorage.setItem('flowse_profile_react', JSON.stringify(completedProfile));
     
-    // Maintain a pristine empty state dashboard on registration as requested
-    updateTransactionsList([]);
-    updateBudgetsList([]);
-    updateGoalsList([]);
-    updateRecurringList([]);
-
-    // Automatically trigger the interactive school tutorial walkthrough for a perfect onboarding experience
-    setShowTour(true);
+    if (restoredData) {
+      updateTransactionsList(restoredData.transactions);
+      updateBudgetsList(restoredData.budgets);
+      updateGoalsList(restoredData.goals);
+      updateRecurringList(restoredData.recurringTransactions);
+    } else {
+      // Maintain a pristine empty state dashboard on registration as requested
+      updateTransactionsList([]);
+      updateBudgetsList([]);
+      updateGoalsList([]);
+      updateRecurringList([]);
+      
+      // Automatically trigger the interactive school tutorial walkthrough for a perfect onboarding experience
+      setShowTour(true);
+    }
   };
 
   const handleFactoryReset = () => {
@@ -972,7 +1045,19 @@ export default function App() {
                       {formatValDecimal(calculatedBalance)}
                     </p>
                     <div className="flex justify-between items-center mt-2 pt-1 relative z-10 border-t border-[#12332A]/20">
-                      <span className="text-[10px] text-[#8c9e99] font-medium">Synced strictly to hardware</span>
+                      <div className="flex items-center space-x-1.5">
+                        <div className={`w-1.5 h-1.5 rounded-full ${
+                          syncStatus === 'synced' ? 'bg-[#1ebd7d]' :
+                          syncStatus === 'syncing' ? 'bg-amber-400 animate-pulse' :
+                          syncStatus === 'error' ? 'bg-red-400' : 'bg-neutral-500'
+                        }`} />
+                        <span className="text-[10px] text-[#8c9e99] font-medium">
+                          {syncStatus === 'synced' && 'Cloud Sync: Active'}
+                          {syncStatus === 'syncing' && 'Backing up...'}
+                          {syncStatus === 'error' && 'Cloud Sync: Offline'}
+                          {syncStatus === 'offline' && 'Offline-only Mode'}
+                        </span>
+                      </div>
                       <button
                         onClick={() => setShowAddTxModal(true)}
                         className="py-1.5 px-3.5 bg-[#1ebd7d] hover:bg-[#1ab073] active:bg-[#158f5c] text-neutral-900 font-bold rounded-xl text-[9.5px] uppercase tracking-wider cursor-pointer shadow-md shadow-[#1ebd7d]/10 hover:scale-[1.03] transition-all flex items-center gap-1"

@@ -4,7 +4,15 @@ import { Sparkles, ArrowRight, Bell, User, Mail, ChevronRight, HelpCircle } from
 import { UserProfile } from '../types';
 
 interface OnboardingProps {
-  onComplete: (profile: UserProfile) => void;
+  onComplete: (
+    profile: UserProfile,
+    restoredData?: {
+      transactions: any[];
+      budgets: any[];
+      goals: any[];
+      recurringTransactions: any[];
+    }
+  ) => void;
 }
 
 export default function Onboarding({ onComplete }: OnboardingProps) {
@@ -16,7 +24,45 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const [pin, setPin] = useState<string>('');
   const [confirmPin, setConfirmPin] = useState<string>('');
   const [pinStep, setPinStep] = useState<'create' | 'confirm'>('create');
+  const [loginPin, setLoginPin] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string>('');
+
+  const getApiUrl = (path: string) => {
+    const isCapacitor = window.location.origin.startsWith('capacitor://') || (window.location.origin.startsWith('http://localhost') && window.location.port === '');
+    if (isCapacitor) {
+      return `http://localhost:5000/api${path}`;
+    }
+    return `/api${path}`;
+  };
+
+  const handleCloudRestore = async (emailVal: string, pinVal: string) => {
+    if (!emailVal.trim() || !/\S+@\S+\.\S+/.test(emailVal)) {
+      setErrorMsg('Please enter a valid email address first.');
+      setLoginPin('');
+      return;
+    }
+    setErrorMsg('Connecting to server to restore data...');
+    try {
+      const response = await fetch(getApiUrl('/auth/login'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailVal, pin: pinVal })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to authenticate.');
+      }
+      onComplete(data.profile, {
+        transactions: data.transactions,
+        budgets: data.budgets,
+        goals: data.goals,
+        recurringTransactions: data.recurringTransactions
+      });
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Network error connecting to backend.');
+      setLoginPin('');
+    }
+  };
 
   const nextStep = () => {
     if (step === 1) {
@@ -35,6 +81,16 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
 
   const handleKeyPress = (num: string) => {
     setErrorMsg('');
+    if (step === 3) {
+      if (loginPin.length < 4) {
+        const nextPin = loginPin + num;
+        setLoginPin(nextPin);
+        if (nextPin.length === 4) {
+          setTimeout(() => handleCloudRestore(email, nextPin), 300);
+        }
+      }
+      return;
+    }
     if (pinStep === 'create') {
       if (pin.length < 4) {
         setPin((prev) => prev + num);
@@ -47,6 +103,10 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   };
 
   const handleDelete = () => {
+    if (step === 3) {
+      setLoginPin((prev) => prev.slice(0, -1));
+      return;
+    }
     if (pinStep === 'create') {
       setPin((prev) => prev.slice(0, -1));
     } else {
@@ -66,9 +126,9 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
 
   React.useEffect(() => {
     if (confirmPin.length === 4 && pinStep === 'confirm') {
-      const timer = setTimeout(() => {
+      const timer = setTimeout(async () => {
         if (pin === confirmPin) {
-          onComplete({
+          const profileData: UserProfile = {
             name: name.trim(),
             email: email.trim(),
             phonePref,
@@ -78,7 +138,34 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
             weeklyDigest: true,
             billReminders: true,
             twoFactor: false,
-          });
+          };
+          
+          try {
+            setErrorMsg('Registering profile on sync server...');
+            const response = await fetch(getApiUrl('/auth/onboard'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ profile: profileData })
+            });
+            const data = await response.json();
+            if (!response.ok) {
+              throw new Error(data.error || 'Failed to register.');
+            }
+            onComplete(profileData);
+          } catch (err: any) {
+            console.warn('Sync server onboard failed, falling back to offline:', err);
+            const proceedOffline = confirm(
+              `Could not connect to the Flowse Sync Server (${err.message}).\n\nDo you want to proceed in offline-only mode? Your data will be saved locally on this device.`
+            );
+            if (proceedOffline) {
+              onComplete(profileData);
+            } else {
+              setErrorMsg('Onboarding cancelled. Sync server required.');
+              setConfirmPin('');
+              setPin('');
+              setPinStep('create');
+            }
+          }
         } else {
           setErrorMsg('PINs do not match. Try again.');
           setConfirmPin('');
@@ -130,6 +217,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
             <div
               key={s}
               className={`h-1.5 rounded-full transition-all duration-300 ${
+                step === 3 && s === 0 ? 'w-6 bg-[#1ebd7d]' :
                 s === step ? 'w-6 bg-[#1ebd7d]' : 'w-2 bg-[#12332A]'
               }`}
             />
@@ -162,7 +250,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 Flowse delivers a premium, offline-first personal finance tracker. Your data stays entirely on this device. Beautifully secure, private, and fast.
               </p>
 
-              <div className="pt-4">
+              <div className="pt-4 space-y-3">
                 <button
                   id="onboarding-welcome-next"
                   onClick={nextStep}
@@ -170,6 +258,15 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 >
                   <span>Begin Secure Setup</span>
                   <ArrowRight size={18} className="translate-x-0 group-hover:translate-x-1 transition-transform" />
+                </button>
+                <button
+                  onClick={() => {
+                    setErrorMsg('');
+                    setStep(3);
+                  }}
+                  className="w-full py-3.5 px-6 bg-transparent hover:bg-[#12332A]/20 text-[#1ebd7d] border border-[#1ebd7d]/30 font-bold rounded-2xl flex items-center justify-center space-x-2 transition-all cursor-pointer text-xs"
+                >
+                  <span>Restore from Cloud Database</span>
                 </button>
               </div>
             </motion.div>
@@ -371,6 +468,110 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
 
               <div className="text-center pt-2">
                 <p className="text-[#1ebd7d] text-[9px] font-mono tracking-widest uppercase font-bold animate-pulse-soft">SHIELDED SAFE ENVIRONMENT</p>
+              </div>
+            </motion.div>
+          )}
+          {step === 3 && (
+            <motion.div
+              key="restore"
+              variants={slideVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={{ duration: 0.35, ease: 'easeOut' }}
+              className="space-y-5 flex flex-col items-center w-full"
+            >
+              <div className="text-center space-y-1.5 w-full">
+                <span className="text-[#1ebd7d] text-[10px] font-mono tracking-widest font-bold">LEDGER CLOUD SYNC</span>
+                <h2 className="text-2xl font-bold text-white tracking-tight font-serif-display">
+                  Restore Ledger State
+                </h2>
+                <p className="text-[#8c9e99] text-[11px] leading-relaxed font-semibold max-w-xs mx-auto">
+                  Enter your email address and 4-digit PIN to download your cloud-backed financial history.
+                </p>
+              </div>
+
+              {errorMsg && (
+                <div className="w-full p-3 bg-red-400/10 border border-red-500/20 text-red-400 rounded-xl text-xs text-center font-bold">
+                  {errorMsg}
+                </div>
+              )}
+
+              <div className="w-full space-y-4 text-left">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-[#1ebd7d] uppercase tracking-widest block font-sans pl-1">Email Address</label>
+                  <div className="relative">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-[#1ebd7d]" size={16} />
+                    <input
+                      id="restore-input-email"
+                      type="email"
+                      className="w-full bg-[#081A15] border border-[#12332A] rounded-2xl py-4 pl-11 pr-4 text-white placeholder-[#506e64] focus:outline-none focus:border-[#1ebd7d] transition-colors font-medium text-xs focus:ring-1 focus:ring-[#1ebd7d]/50"
+                      placeholder="eleanor@example.com"
+                      value={email}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        setErrorMsg('');
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Secure dots indicators for login pin */}
+              <div className="flex space-x-6 my-2">
+                {[0, 1, 2, 3].map((index) => {
+                  const active = index < loginPin.length;
+                  return (
+                    <div
+                      key={index}
+                      className={`w-4 h-4 rounded-full border-2 transition-all duration-200 ${
+                        active ? 'bg-[#1ebd7d] border-[#1ebd7d] scale-125 shadow-lg shadow-[#1ebd7d]/35' : 'border-[#12332A] bg-transparent'
+                      }`}
+                    />
+                  );
+                })}
+              </div>
+
+              {/* Secure grid keypad */}
+              <div className="w-full max-w-[270px] grid grid-cols-3 gap-3.5 pt-1">
+                {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((num) => (
+                  <button
+                    id={`restore-keypad-${num}`}
+                    key={num}
+                    onClick={() => handleKeyPress(num)}
+                    className="aspect-square rounded-full bg-[#081A15] hover:bg-[#12332A] active:bg-[#1ebd7d]/20 text-xl font-bold text-white flex items-center justify-center transition-all border border-[#12332A] shadow cursor-pointer"
+                  >
+                    {num}
+                  </button>
+                ))}
+                <button
+                  onClick={() => {
+                    setErrorMsg('');
+                    setStep(0);
+                    setLoginPin('');
+                  }}
+                  className="aspect-square rounded-full bg-[#12332A]/20 hover:bg-[#12332A]/40 active:bg-amber-500/15 text-[#8c9e99] flex items-center justify-center transition-all hover:text-white border border-[#12332A]/30 text-xs font-bold tracking-widest uppercase cursor-pointer"
+                >
+                  BACK
+                </button>
+                <button
+                  id="restore-keypad-0"
+                  onClick={() => handleKeyPress('0')}
+                  className="aspect-square rounded-full bg-[#081A15] hover:bg-[#12332A] active:bg-[#1ebd7d]/20 text-xl font-bold text-white flex items-center justify-center transition-all border border-[#12332A] shadow cursor-pointer"
+                >
+                  0
+                </button>
+                <button
+                  id="restore-keypad-delete"
+                  onClick={handleDelete}
+                  className="aspect-square rounded-full bg-[#12332A]/50 hover:bg-[#12332A] active:bg-amber-500/15 text-[#1ebd7d] flex items-center justify-center transition-all border border-[#12332A]/30 text-xs font-bold tracking-widest uppercase cursor-pointer"
+                >
+                  DEL
+                </button>
+              </div>
+
+              <div className="text-center pt-2">
+                <p className="text-[#1ebd7d] text-[9px] font-mono tracking-widest uppercase font-bold animate-pulse-soft">SECURE LEDGER RESTORE</p>
               </div>
             </motion.div>
           )}
