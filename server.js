@@ -1,6 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const { MongoClient } = require('mongodb');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -19,19 +20,27 @@ app.use((req, res, next) => {
   next();
 });
 
+// Database Config
+const MONGODB_URI = process.env.MONGODB_URI;
+let mongoClient = null;
+let mongoDb = null;
+
+// Local JSON File Database Config
 const DB_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DB_DIR, 'db.json');
 
-// Ensure db directory and json storage file exist
-if (!fs.existsSync(DB_DIR)) {
-  fs.mkdirSync(DB_DIR);
-}
-if (!fs.existsSync(DB_FILE)) {
-  fs.writeFileSync(DB_FILE, JSON.stringify({}));
+if (!MONGODB_URI) {
+  // Ensure local db directory and json storage file exist for local fallback
+  if (!fs.existsSync(DB_DIR)) {
+    fs.mkdirSync(DB_DIR);
+  }
+  if (!fs.existsSync(DB_FILE)) {
+    fs.writeFileSync(DB_FILE, JSON.stringify({}));
+  }
 }
 
-// DB Helpers
-function readDB() {
+// Local File Helper functions
+function readLocalDB() {
   try {
     const data = fs.readFileSync(DB_FILE, 'utf8');
     return JSON.parse(data || '{}');
@@ -41,7 +50,7 @@ function readDB() {
   }
 }
 
-function writeDB(data) {
+function writeLocalDB(data) {
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
   } catch (err) {
@@ -49,86 +58,147 @@ function writeDB(data) {
   }
 }
 
+// MongoDB Helper functions
+async function getMongoCollection() {
+  if (!mongoDb) {
+    mongoClient = new MongoClient(MONGODB_URI);
+    await mongoClient.connect();
+    mongoDb = mongoClient.db('flowse');
+  }
+  return mongoDb.collection('users');
+}
+
+// Abstracted Database Interface Adapter
+async function readUser(email) {
+  const normalizedEmail = email.toLowerCase().trim();
+  if (MONGODB_URI) {
+    const col = await getMongoCollection();
+    const user = await col.findOne({ email: normalizedEmail });
+    return user;
+  } else {
+    const localDB = readLocalDB();
+    return localDB[normalizedEmail];
+  }
+}
+
+async function writeUser(email, userData) {
+  const normalizedEmail = email.toLowerCase().trim();
+  if (MONGODB_URI) {
+    const col = await getMongoCollection();
+    // Exclude MongoDB system _id field if present to prevent update errors
+    const dataToSave = { ...userData };
+    delete dataToSave._id;
+    await col.updateOne(
+      { email: normalizedEmail },
+      { $set: { ...dataToSave, email: normalizedEmail } },
+      { upsert: true }
+    );
+  } else {
+    const localDB = readLocalDB();
+    localDB[normalizedEmail] = userData;
+    writeLocalDB(localDB);
+  }
+}
+
+async function userExists(email) {
+  const normalizedEmail = email.toLowerCase().trim();
+  if (MONGODB_URI) {
+    const col = await getMongoCollection();
+    const count = await col.countDocuments({ email: normalizedEmail });
+    return count > 0;
+  } else {
+    const localDB = readLocalDB();
+    return !!localDB[normalizedEmail];
+  }
+}
+
 // 1. Onboard / Register User
-app.post('/api/auth/onboard', (req, res) => {
+app.post('/api/auth/onboard', async (req, res) => {
   const { profile } = req.body;
   if (!profile || !profile.email || !profile.pin) {
     return res.status(400).json({ error: 'Invalid profile data.' });
   }
 
-  const db = readDB();
   const email = profile.email.toLowerCase().trim();
+  try {
+    const exists = await userExists(email);
+    if (exists) {
+      return res.status(400).json({ error: 'User with this email already exists.' });
+    }
 
-  if (db[email]) {
-    return res.status(400).json({ error: 'User with this email already exists.' });
+    const userData = {
+      profile,
+      transactions: [],
+      budgets: [],
+      goals: [],
+      recurringTransactions: [],
+      lastSynced: new Date().toISOString()
+    };
+
+    await writeUser(email, userData);
+    res.json({ message: 'Onboarded successfully.', profile });
+  } catch (err) {
+    console.error('Onboard error:', err);
+    res.status(500).json({ error: 'Internal server error.' });
   }
-
-  db[email] = {
-    profile,
-    transactions: [],
-    budgets: [],
-    goals: [],
-    recurringTransactions: [],
-    lastSynced: new Date().toISOString()
-  };
-
-  writeDB(db);
-  res.json({ message: 'Onboarded successfully.', profile });
 });
 
 // 2. Login / Restore Ledger Data
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { email, pin } = req.body;
   if (!email || !pin) {
     return res.status(400).json({ error: 'Email and PIN are required.' });
   }
 
-  const db = readDB();
-  const normalizedEmail = email.toLowerCase().trim();
-  const user = db[normalizedEmail];
+  try {
+    const user = await readUser(email);
+    if (!user || user.profile.pin !== pin) {
+      return res.status(401).json({ error: 'Invalid email or PIN.' });
+    }
 
-  if (!user || user.profile.pin !== pin) {
-    return res.status(401).json({ error: 'Invalid email or PIN.' });
+    res.json({
+      message: 'Authenticated successfully.',
+      profile: user.profile,
+      transactions: user.transactions || [],
+      budgets: user.budgets || [],
+      goals: user.goals || [],
+      recurringTransactions: user.recurringTransactions || []
+    });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: 'Internal server error.' });
   }
-
-  res.json({
-    message: 'Authenticated successfully.',
-    profile: user.profile,
-    transactions: user.transactions || [],
-    budgets: user.budgets || [],
-    goals: user.goals || [],
-    recurringTransactions: user.recurringTransactions || []
-  });
 });
 
 // 3. Synchronize Ledger Data
-app.post('/api/data/sync', (req, res) => {
+app.post('/api/data/sync', async (req, res) => {
   const { email, pin, data } = req.body;
   if (!email || !pin || !data) {
     return res.status(400).json({ error: 'Invalid sync payload.' });
   }
 
-  const db = readDB();
-  const normalizedEmail = email.toLowerCase().trim();
-  const user = db[normalizedEmail];
+  try {
+    const user = await readUser(email);
+    if (!user || user.profile.pin !== pin) {
+      return res.status(401).json({ error: 'Authentication failed.' });
+    }
 
-  if (!user || user.profile.pin !== pin) {
-    return res.status(401).json({ error: 'Authentication failed.' });
+    const updatedUserData = {
+      ...user,
+      profile: data.profile || user.profile,
+      transactions: data.transactions || [],
+      budgets: data.budgets || [],
+      goals: data.goals || [],
+      recurringTransactions: data.recurringTransactions || [],
+      lastSynced: new Date().toISOString()
+    };
+
+    await writeUser(email, updatedUserData);
+    res.json({ message: 'Synchronized successfully.' });
+  } catch (err) {
+    console.error('Sync error:', err);
+    res.status(500).json({ error: 'Internal server error.' });
   }
-
-  // Overwrite server database with the latest client sync state
-  db[normalizedEmail] = {
-    ...user,
-    profile: data.profile || user.profile,
-    transactions: data.transactions || [],
-    budgets: data.budgets || [],
-    goals: data.goals || [],
-    recurringTransactions: data.recurringTransactions || [],
-    lastSynced: new Date().toISOString()
-  };
-
-  writeDB(db);
-  res.json({ message: 'Synchronized successfully.' });
 });
 
 // Serve Vite Static Bundle
@@ -139,6 +209,12 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`Flowse Sync Server running on port ${PORT}`);
-});
+// Start standalone server locally
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`Flowse Sync Server running on port ${PORT}`);
+  });
+}
+
+// Export for Vercel Serverless hosting
+module.exports = app;
