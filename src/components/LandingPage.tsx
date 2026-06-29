@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Download, ArrowRight, Shield, Activity, TrendingUp, Cpu, Menu, X, PiggyBank, RefreshCw, Check } from 'lucide-react';
 
 interface LandingPageProps {
