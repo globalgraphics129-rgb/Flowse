@@ -53,6 +53,7 @@ import { processRecurringTransactions } from './utils/recurring';
 import CategoryIcon from './components/CategoryIcon';
 import Onboarding from './components/Onboarding';
 import LockScreen from './components/LockScreen';
+import LandingPage from './components/LandingPage';
 import StatsPage from './components/StatsPage';
 import TransactionForm from './components/TransactionForm';
 import RecurringForm from './components/RecurringForm';
@@ -68,6 +69,7 @@ export default function App() {
   // Navigation & Screen Control
   const [appBooting, setAppBooting] = useState<boolean>(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [startedOnboarding, setStartedOnboarding] = useState<boolean>(false);
 
   const getApiUrl = (path: string) => {
     const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -703,6 +705,9 @@ export default function App() {
 
   // Onboarding Screen Branch
   if (!profile || !profile.onboarded) {
+    if (!startedOnboarding) {
+      return <LandingPage onLaunchApp={() => setStartedOnboarding(true)} />;
+    }
     return <Onboarding onComplete={handleOnboardComplete} />;
   }
 
