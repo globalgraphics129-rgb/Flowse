@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles, ArrowRight, Bell, User, Mail, ChevronRight, HelpCircle } from 'lucide-react';
+import { Sparkles, ArrowRight, Bell, User, Mail, ChevronRight, HelpCircle, Repeat, Globe } from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface OnboardingProps {
@@ -11,7 +11,8 @@ interface OnboardingProps {
       budgets: any[];
       goals: any[];
       recurringTransactions: any[];
-    }
+    },
+    customServerUrl?: string
   ) => void;
 }
 
@@ -25,9 +26,14 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const [confirmPin, setConfirmPin] = useState<string>('');
   const [pinStep, setPinStep] = useState<'create' | 'confirm'>('create');
   const [loginPin, setLoginPin] = useState<string>('');
+  const [customServerUrl, setCustomServerUrl] = useState<string>('');
+  const [showCustomServer, setShowCustomServer] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
 
   const getApiUrl = (path: string) => {
+    if (customServerUrl.trim()) {
+      return `${customServerUrl.trim().replace(/\/$/, '')}/api${path}`;
+    }
     const isCapacitor = window.location.origin.startsWith('capacitor://') || (window.location.origin.startsWith('http://localhost') && window.location.port === '');
     if (isCapacitor) {
       return `http://localhost:5000/api${path}`;
@@ -57,7 +63,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
         budgets: data.budgets,
         goals: data.goals,
         recurringTransactions: data.recurringTransactions
-      });
+      }, customServerUrl.trim() || undefined);
     } catch (err: any) {
       setErrorMsg(err.message || 'Network error connecting to backend.');
       setLoginPin('');
@@ -151,7 +157,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
             if (!response.ok) {
               throw new Error(data.error || 'Failed to register.');
             }
-            onComplete(profileData);
+            onComplete(profileData, undefined, customServerUrl.trim() || undefined);
           } catch (err: any) {
             console.warn('Sync server onboard failed, falling back to offline:', err);
             const proceedOffline = confirm(
@@ -200,7 +206,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,rgba(18,51,42,0.25),transparent_50%)] pointer-events-none" />
 
       {/* Header section with brand logo */}
-      <div className="relative z-10 w-full max-w-md mx-auto flex items-center justify-between pt-4">
+      <div className="relative z-10 w-full max-w-md mx-auto flex items-center justify-between pt-[calc(env(safe-area-inset-top)+16px)]">
         <div className="flex items-center space-x-3">
           {/* Static logo element */}
           <div className="relative w-8 h-8 bg-[#1ebd7d] rounded-xl flex items-center justify-center text-white overflow-hidden shadow">
@@ -379,6 +385,47 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                     <p className="text-[10px] text-[#8c9e99] leading-relaxed font-semibold">Get beautiful local reminders if you exceed your budget constraints.</p>
                   </div>
                 </div>
+
+                {/* Custom Sync Server Toggle */}
+                <div className="bg-[#081A15] border border-[#12332A] rounded-2xl p-4 flex items-start space-x-3">
+                  <Repeat className="text-[#1ebd7d] shrink-0 mt-0.5" size={16} />
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-white">📡 Use Custom Sync Server</span>
+                      <button
+                        type="button"
+                        onClick={() => setShowCustomServer(!showCustomServer)}
+                        className={`w-10 h-5.5 rounded-full p-0.5 transition-colors duration-200 focus:outline-none cursor-pointer ${
+                          showCustomServer ? 'bg-[#1ebd7d]' : 'bg-[#12332A]'
+                        }`}
+                      >
+                        <div
+                          className={`bg-white w-4.5 h-4.5 rounded-full shadow transform duration-200 ease-in-out ${
+                            showCustomServer ? 'translate-x-4.5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-[#8c9e99] leading-relaxed font-semibold">
+                      Enable cloud backup to a custom Flowse backend server instance instead of local-only storage.
+                    </p>
+                    {showCustomServer && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="pt-2"
+                      >
+                        <input
+                          type="url"
+                          className="w-full bg-[#040D0A] border border-[#12332A] rounded-xl p-2.5 text-white placeholder-[#506e64] focus:outline-none focus:border-[#1ebd7d] transition-colors font-medium text-xs focus:ring-1 focus:ring-[#1ebd7d]/50"
+                          placeholder="https://your-flowse-server.com"
+                          value={customServerUrl}
+                          onChange={(e) => setCustomServerUrl(e.target.value)}
+                        />
+                      </motion.div>
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div className="pt-2">
@@ -510,6 +557,24 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                       value={email}
                       onChange={(e) => {
                         setEmail(e.target.value);
+                        setErrorMsg('');
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-[#1ebd7d] uppercase tracking-widest block font-sans pl-1">Sync Server URL (Optional)</label>
+                  <div className="relative">
+                    <Globe className="absolute left-4 top-1/2 -translate-y-1/2 text-[#1ebd7d]" size={16} />
+                    <input
+                      id="restore-input-server"
+                      type="url"
+                      className="w-full bg-[#081A15] border border-[#12332A] rounded-2xl py-4 pl-11 pr-4 text-white placeholder-[#506e64] focus:outline-none focus:border-[#1ebd7d] transition-colors font-medium text-xs focus:ring-1 focus:ring-[#1ebd7d]/50"
+                      placeholder="https://your-flowse-server.com"
+                      value={customServerUrl}
+                      onChange={(e) => {
+                        setCustomServerUrl(e.target.value);
                         setErrorMsg('');
                       }}
                     />

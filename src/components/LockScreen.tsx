@@ -46,7 +46,7 @@ export default function LockScreen({ userName, savedPin, onVerify, onFactoryRese
       <div className="absolute inset-x-0 bottom-0 h-96 bg-[radial-gradient(ellipse_at_bottom,rgba(16,185,129,0.05),transparent_70%)] pointer-events-none" />
 
       {/* Top Lock Badge with Static Flowse Logo */}
-      <div className="relative z-10 w-full max-w-md mx-auto flex flex-col items-center pt-8">
+      <div className="relative z-10 w-full max-w-md mx-auto flex flex-col items-center pt-[calc(env(safe-area-inset-top)+24px)]">
         <motion.div
           initial={{ scale: 0.85, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}

@@ -68,6 +68,20 @@ export default function App() {
   // Navigation & Screen Control
   const [appBooting, setAppBooting] = useState<boolean>(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [syncServerUrl, setSyncServerUrl] = useState<string>(() => {
+    return localStorage.getItem('flowse_sync_server_url') || '';
+  });
+
+  const getApiUrl = (path: string) => {
+    if (syncServerUrl.trim()) {
+      return `${syncServerUrl.trim().replace(/\/$/, '')}/api${path}`;
+    }
+    const isCapacitor = window.location.origin.startsWith('capacitor://') || (window.location.origin.startsWith('http://localhost') && window.location.port === '');
+    if (isCapacitor) {
+      return `http://localhost:5000/api${path}`;
+    }
+    return `/api${path}`;
+  };
 
   // Flowse Modular Theme Preferences (light | dark | system)
   const [themePref, setThemePref] = useState<'light' | 'dark' | 'system'>(() => {
@@ -178,13 +192,7 @@ export default function App() {
     }
     setSyncStatus('syncing');
     try {
-      const getApiUrl = (path: string) => {
-        const isCapacitor = window.location.origin.startsWith('capacitor://') || (window.location.origin.startsWith('http://localhost') && window.location.port === '');
-        if (isCapacitor) {
-          return `http://localhost:5000/api${path}`;
-        }
-        return `/api${path}`;
-      };
+      // getApiUrl is defined globally at the component level
 
       const response = await fetch(getApiUrl('/data/sync'), {
         method: 'POST',
@@ -385,11 +393,16 @@ export default function App() {
       budgets: Budget[];
       goals: Goal[];
       recurringTransactions: RecurringTransaction[];
-    }
+    },
+    customServerUrlVal?: string
   ) => {
     setProfile(completedProfile);
     setPinVerified(true);
     localStorage.setItem('flowse_profile_react', JSON.stringify(completedProfile));
+    if (customServerUrlVal) {
+      setSyncServerUrl(customServerUrlVal);
+      localStorage.setItem('flowse_sync_server_url', customServerUrlVal);
+    }
     
     if (restoredData) {
       updateTransactionsList(restoredData.transactions);
@@ -626,7 +639,7 @@ export default function App() {
     reader.readAsText(file);
   };
 
-  const handleProfileSave = (nameInput: string, emailInput: string, currencyInput: string, notifyInput: boolean) => {
+  const handleProfileSave = (nameInput: string, emailInput: string, currencyInput: string, notifyInput: boolean, syncServerInput?: string) => {
     if (!profile) return;
     const updated: UserProfile = {
       ...profile,
@@ -637,7 +650,11 @@ export default function App() {
     };
     setProfile(updated);
     localStorage.setItem('flowse_profile_react', JSON.stringify(updated));
-    alert('Local configuration saved successfully!');
+    if (syncServerInput !== undefined) {
+      setSyncServerUrl(syncServerInput);
+      localStorage.setItem('flowse_sync_server_url', syncServerInput);
+    }
+    alert('Configuration saved successfully!');
   };
 
   // Formatter functions
@@ -720,7 +737,7 @@ export default function App() {
     <div className="min-h-screen bg-natural font-sans text-natural flex flex-col lg:flex-row antialiased relative selection:bg-[#1ebd7d]/35 selection:text-white transition-colors duration-300">
       
       {/* Dynamic desktop navigation sidebar matching Natural Tones code */}
-      <aside className="hidden lg:flex w-64 bg-cream border-r border-soft flex-col p-8 shrink-0 relative z-10 select-none transition-colors duration-300">
+      <aside className="hidden lg:flex w-64 bg-cream border-r border-soft flex-col p-8 pt-[calc(env(safe-area-inset-top)+32px)] shrink-0 relative z-10 select-none transition-colors duration-300">
         
         {/* Brand Header block */}
         <div className="flex items-center justify-between mb-10 group cursor-pointer">
@@ -837,7 +854,7 @@ export default function App() {
       </aside>
 
       {/* Main viewport Container */}
-      <main className="flex-1 p-5 md:p-8 lg:p-10 flex flex-col gap-6 overflow-hidden min-h-screen relative pb-24 lg:pb-10 bg-natural">
+      <main className="flex-1 p-5 md:p-8 lg:p-10 flex flex-col gap-6 overflow-hidden min-h-screen relative pb-24 lg:pb-10 bg-natural pt-[calc(env(safe-area-inset-top)+20px)]">
         
         {/* Universal Desk Header */}
         <header className="flex flex-row justify-between items-center gap-4 border-b border-border-soft pb-4 select-none">
@@ -1896,7 +1913,8 @@ export default function App() {
                         const eInput = (form.elements.namedItem('p_email') as HTMLInputElement).value;
                         const cInput = (form.elements.namedItem('p_curr') as HTMLSelectElement).value;
                         const nToggle = (form.elements.namedItem('p_notify') as HTMLInputElement).checked;
-                        handleProfileSave(nInput, eInput, cInput, nToggle);
+                        const sInput = (form.elements.namedItem('p_sync_server') as HTMLInputElement).value;
+                        handleProfileSave(nInput, eInput, cInput, nToggle, sInput);
                       }}
                       className="space-y-4 text-natural-text"
                     >
@@ -1922,6 +1940,17 @@ export default function App() {
                             className="w-full bg-natural border border-border-soft rounded-xl p-3 text-xs text-natural-text focus:outline-none focus:border-sage font-bold"
                           />
                         </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-sage uppercase tracking-widest block font-mono">📡 Cloud Sync Server URL</label>
+                        <input 
+                          name="p_sync_server"
+                          type="url" 
+                          defaultValue={syncServerUrl}
+                          placeholder="https://your-flowse-server.com (Optional)"
+                          className="w-full bg-natural border border-border-soft rounded-xl p-3 text-xs text-natural-text focus:outline-none focus:border-sage font-bold"
+                        />
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -2041,14 +2070,14 @@ export default function App() {
       {/* Floating center mobile action payment entry trigger */}
       <button
         onClick={() => setShowAddTxModal(true)}
-        className="fixed bottom-20 right-6 lg:hidden w-12 h-12 rounded-full bg-[#1ebd7d] text-neutral-950 flex items-center justify-center shadow-lg shadow-[#1ebd7d]/35 z-50 cursor-pointer"
+        className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] right-6 lg:hidden w-12 h-12 rounded-full bg-[#1ebd7d] text-neutral-950 flex items-center justify-center shadow-lg shadow-[#1ebd7d]/35 z-50 cursor-pointer"
         title="Add transaction log"
       >
-        <Plus size={20} className="stroke-[3px]" />
+        <Plus size={20} strokeWidth={3} />
       </button>
 
       {/* Responsive mobile touch-friendly bottom navigation bar matching DM Sans rules */}
-      <nav className="fixed bottom-0 inset-x-0 h-16 bg-[#040D0A] border-t border-[#12332A] lg:hidden flex justify-around items-center px-2 select-none z-40 shadow-xl">
+      <nav className="fixed bottom-0 inset-x-0 h-[calc(4rem+env(safe-area-inset-bottom))] pb-[env(safe-area-inset-bottom)] bg-[#040D0A] border-t border-[#12332A] lg:hidden flex justify-around items-center px-2 select-none z-40 shadow-xl">
         {[
           { id: 'dashboard', label: 'Home', icon: Home },
           { id: 'transactions', label: 'Logs', icon: Coins },

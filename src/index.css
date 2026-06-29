@@ -10,7 +10,8 @@
   --color-clay: var(--clay);
   --color-moss: var(--moss);
   
-  --font-sans: 'Poppins', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Poppins', sans-serif;
+  --font-serif: 'Poppins', sans-serif;
   --font-serif-display: 'Poppins', sans-serif;
   --font-sans-dm: 'Poppins', sans-serif;
 }
