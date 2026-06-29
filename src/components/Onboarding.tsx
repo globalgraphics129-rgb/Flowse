@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles, ArrowRight, Bell, User, Mail, ChevronRight, HelpCircle, Repeat, Globe } from 'lucide-react';
+import { Mail, User, Eye, EyeOff, Lock, Sparkles, Check, Phone, ArrowRight } from 'lucide-react';
 import { UserProfile } from '../types';
 
 interface OnboardingProps {
@@ -16,16 +16,23 @@ interface OnboardingProps {
 }
 
 export default function Onboarding({ onComplete }: OnboardingProps) {
-  const [step, setStep] = useState<number>(0);
-  const [name, setName] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<'login' | 'signup'>('signup');
+  
+  // Form states
+  const [firstName, setFirstName] = useState<string>('');
+  const [lastName, setLastName] = useState<string>('');
   const [email, setEmail] = useState<string>('');
-  const [phonePref, setPhonePref] = useState<boolean>(true);
-  const [currency, setCurrency] = useState<string>('₦');
   const [pin, setPin] = useState<string>('');
   const [confirmPin, setConfirmPin] = useState<string>('');
-  const [pinStep, setPinStep] = useState<'create' | 'confirm'>('create');
-  const [loginPin, setLoginPin] = useState<string>('');
+  const [currency, setCurrency] = useState<string>('₦');
+  const [phonePref, setPhonePref] = useState<boolean>(true);
+  
+  // UI states
+  const [signUpMethod, setSignUpMethod] = useState<'email' | 'phone'>('email');
+  const [showPin, setShowPin] = useState<boolean>(false);
+  const [showConfirmPin, setShowConfirmPin] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const getApiUrl = (path: string) => {
     const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
@@ -35,552 +42,464 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     return `https://flowse-six.vercel.app/api${path}`;
   };
 
-  const handleCloudRestore = async (emailVal: string, pinVal: string) => {
-    if (!emailVal.trim() || !/\S+@\S+\.\S+/.test(emailVal)) {
-      setErrorMsg('Please enter a valid email address first.');
-      setLoginPin('');
+  const handleCloudRestore = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) {
+      setErrorMsg('Please enter a valid email address.');
       return;
     }
-    setErrorMsg('Connecting to server to restore data...');
+    if (pin.length !== 4 || isNaN(Number(pin))) {
+      setErrorMsg('Please enter a valid 4-digit numeric PIN.');
+      return;
+    }
+
+    setIsLoading(true);
+    setErrorMsg('');
     try {
       const response = await fetch(getApiUrl('/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailVal, pin: pinVal })
+        body: JSON.stringify({ email: email.trim(), pin: pin.trim() })
       });
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error || 'Failed to authenticate.');
       }
       onComplete(data.profile, {
-        transactions: data.transactions,
-        budgets: data.budgets,
-        goals: data.goals,
-        recurringTransactions: data.recurringTransactions
+        transactions: data.transactions || [],
+        budgets: data.budgets || [],
+        goals: data.goals || [],
+        recurringTransactions: data.recurringTransactions || []
       });
     } catch (err: any) {
       setErrorMsg(err.message || 'Network error connecting to backend.');
-      setLoginPin('');
+      setIsLoading(false);
     }
   };
 
-  const nextStep = () => {
-    if (step === 1) {
-      if (!name.trim()) {
-        setErrorMsg('Please enter your name');
-        return;
-      }
-      if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) {
-        setErrorMsg('Please enter a valid email address');
-        return;
-      }
-    }
-    setErrorMsg('');
-    setStep((prev) => prev + 1);
-  };
-
-  const handleKeyPress = (num: string) => {
-    setErrorMsg('');
-    if (step === 3) {
-      if (loginPin.length < 4) {
-        const nextPin = loginPin + num;
-        setLoginPin(nextPin);
-        if (nextPin.length === 4) {
-          setTimeout(() => handleCloudRestore(email, nextPin), 300);
-        }
-      }
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (signUpMethod === 'phone') {
+      setErrorMsg('Phone sign-up is not fully configured yet. Please register with your Email Address.');
       return;
     }
-    if (pinStep === 'create') {
-      if (pin.length < 4) {
-        setPin((prev) => prev + num);
-      }
-    } else {
-      if (confirmPin.length < 4) {
-        setConfirmPin((prev) => prev + num);
-      }
-    }
-  };
-
-  const handleDelete = () => {
-    if (step === 3) {
-      setLoginPin((prev) => prev.slice(0, -1));
+    if (!firstName.trim() || !lastName.trim()) {
+      setErrorMsg('Please enter your first and last name.');
       return;
     }
-    if (pinStep === 'create') {
-      setPin((prev) => prev.slice(0, -1));
-    } else {
-      setConfirmPin((prev) => prev.slice(0, -1));
+    if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) {
+      setErrorMsg('Please enter a valid email address.');
+      return;
     }
-  };
-
-  // Triggered when pin editing finishes
-  React.useEffect(() => {
-    if (pin.length === 4 && pinStep === 'create') {
-      const timer = setTimeout(() => {
-        setPinStep('confirm');
-      }, 300);
-      return () => clearTimeout(timer);
+    if (pin.length !== 4 || isNaN(Number(pin))) {
+      setErrorMsg('PIN must be a 4-digit code (e.g. 1234).');
+      return;
     }
-  }, [pin, pinStep]);
-
-  React.useEffect(() => {
-    if (confirmPin.length === 4 && pinStep === 'confirm') {
-      const timer = setTimeout(async () => {
-        if (pin === confirmPin) {
-          const profileData: UserProfile = {
-            name: name.trim(),
-            email: email.trim(),
-            phonePref,
-            pin,
-            onboarded: true,
-            currency,
-            weeklyDigest: true,
-            billReminders: true,
-            twoFactor: false,
-          };
-          
-          try {
-            setErrorMsg('Registering profile on sync server...');
-            const response = await fetch(getApiUrl('/auth/onboard'), {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ profile: profileData })
-            });
-            const data = await response.json();
-            if (!response.ok) {
-              throw new Error(data.error || 'Failed to register.');
-            }
-            onComplete(profileData);
-          } catch (err: any) {
-            console.warn('Sync server onboard failed, falling back to offline:', err);
-            const proceedOffline = confirm(
-              `Could not connect to the Flowse Sync Server (${err.message}).\n\nDo you want to proceed in offline-only mode? Your data will be saved locally on this device.`
-            );
-            if (proceedOffline) {
-              onComplete(profileData);
-            } else {
-              setErrorMsg('Onboarding cancelled. Sync server required.');
-              setConfirmPin('');
-              setPin('');
-              setPinStep('create');
-            }
-          }
-        } else {
-          setErrorMsg('PINs do not match. Try again.');
-          setConfirmPin('');
-          setPin('');
-          setPinStep('create');
-        }
-      }, 300);
-      return () => clearTimeout(timer);
+    if (pin !== confirmPin) {
+      setErrorMsg('PINs do not match. Please verify.');
+      return;
     }
-  }, [confirmPin, pinStep, pin, name, email, phonePref, currency, onComplete]);
 
-  // Page slider configurations
-  const slideVariants = {
-    enter: (direction: number) => ({
-      x: direction > 0 ? 250 : -250,
-      opacity: 0,
-    }),
-    center: {
-      x: 0,
-      opacity: 1,
-    },
-    exit: (direction: number) => ({
-      x: direction < 0 ? 250 : -250,
-      opacity: 0,
-    }),
+    setIsLoading(true);
+    setErrorMsg('');
+
+    const profileData: UserProfile = {
+      name: `${firstName.trim()} ${lastName.trim()}`,
+      email: email.trim().toLowerCase(),
+      phonePref,
+      pin: pin.trim(),
+      onboarded: true,
+      currency,
+      weeklyDigest: true,
+      billReminders: true,
+      twoFactor: false,
+    };
+
+    try {
+      const response = await fetch(getApiUrl('/auth/onboard'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile: profileData })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to register.');
+      }
+      onComplete(profileData);
+    } catch (err: any) {
+      console.warn('Sync server onboard failed, falling back to offline:', err);
+      const proceedOffline = confirm(
+        `Could not connect to the Flowse Sync Server (${err.message}).\n\nDo you want to proceed in offline-only mode? Your data will be saved locally on this device.`
+      );
+      if (proceedOffline) {
+        onComplete(profileData);
+      } else {
+        setErrorMsg(err.message || 'Onboarding cancelled.');
+        setIsLoading(false);
+      }
+    }
   };
 
   return (
-    <div className="min-h-screen bg-[#040D0A] text-[#E2ECE9] flex flex-col justify-between p-6 overflow-hidden font-sans relative select-none">
-      {/* Background premium effects */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(30,189,125,0.08),transparent_50%)] pointer-events-none" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,rgba(18,51,42,0.25),transparent_50%)] pointer-events-none" />
-
-      {/* Header section with brand logo */}
-      <div className="relative z-10 w-full max-w-md mx-auto flex items-center justify-between pt-[calc(env(safe-area-inset-top)+16px)]">
-        <div className="flex items-center space-x-3">
-          {/* Static logo element */}
-          <div className="relative w-8 h-8 bg-[#1ebd7d] rounded-xl flex items-center justify-center text-white overflow-hidden shadow">
-            <div className="absolute top-0.5 right-0.5 w-3 h-3 rounded-full bg-white/25 blur-[0.2px]" />
-            <div className="absolute w-4.5 h-4.5 border-2 border-white border-t-white border-r-white border-b-transparent border-l-transparent rounded-full" />
-            <div className="absolute w-1 h-1 bg-white rounded-full" />
+    <div className="min-h-screen bg-[#02130e] text-[#E2ECE9] flex flex-col justify-between overflow-hidden font-sans relative select-none pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+      
+      {/* Top Brand Green Backdrop Banner */}
+      <div className="relative px-6 pt-8 pb-12 bg-gradient-to-b from-[#063c2c] to-[#02130e] flex flex-row items-end justify-between max-w-md mx-auto w-full">
+        <div className="space-y-4 max-w-[280px]">
+          {/* Static premium logo */}
+          <div className="relative w-12 h-12 bg-gradient-to-br from-[#1ebd7d] to-[#109d64] rounded-2xl flex items-center justify-center text-white shadow-lg overflow-hidden">
+            <div className="absolute top-1 right-1 w-6 h-6 rounded-full bg-white/20 blur-[0.2px]" />
+            <div className="absolute w-6.5 h-6.5 border-[3px] border-white border-t-white border-r-white border-b-transparent border-l-transparent rounded-full" />
+            <div className="absolute w-2 h-2 bg-white rounded-full" />
           </div>
-          <span className="font-black text-sm tracking-[0.2em] text-[#1ebd7d] font-sans">FLOWSE</span>
+          
+          <div className="space-y-2">
+            <h1 className="text-3xl font-extrabold tracking-tight text-white leading-tight">
+              Welcome to Flowse
+            </h1>
+            <p className="text-[#8c9e99] text-xs leading-relaxed font-medium">
+              {activeTab === 'signup' 
+                ? 'Create your account and start building calmer money habits today.'
+                : 'Welcome back! Restore your cloud treasury parameters and logs.'
+              }
+            </p>
+          </div>
         </div>
-        
-        {/* Step indicator bars */}
-        <div className="flex space-x-1.5">
-          {[0, 1, 2].map((s) => (
-            <div
-              key={s}
-              className={`h-1.5 rounded-full transition-all duration-300 ${
-                step === 3 && s === 0 ? 'w-6 bg-[#1ebd7d]' :
-                s === step ? 'w-6 bg-[#1ebd7d]' : 'w-2 bg-[#12332A]'
-              }`}
-            />
-          ))}
+
+        {/* Right side glassmorphic dynamic block */}
+        <div className="w-20 h-20 rounded-3xl bg-white/5 border border-white/10 backdrop-blur-md flex items-center justify-center text-white text-3xl font-light shadow-xl shrink-0 transition-transform duration-700 hover:rotate-90">
+          +
         </div>
       </div>
 
-      {/* Main sliding content deck */}
-      <div className="relative z-10 w-full max-w-md mx-auto flex-1 flex flex-col justify-center my-6">
-        <AnimatePresence mode="wait" initial={false} custom={step}>
-          {step === 0 && (
-            <motion.div
-              key="welcome"
-              variants={slideVariants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={{ duration: 0.35, ease: 'easeOut' }}
-              className="space-y-6"
-            >
-              <div className="inline-flex py-1 px-3 rounded-full bg-[#1ebd7d]/10 border border-[#1ebd7d]/20 text-[#1ebd7d] text-xs font-mono font-semibold tracking-wider">
-                <Sparkles size={13} className="inline mr-1 text-[#1ebd7d]" /> MONEY IN MOTION
+      {/* Bottom Form Container Card */}
+      <div className="bg-[#050b09] rounded-t-[40px] border-t border-[#122822] flex-1 flex flex-col p-6 w-full max-w-md mx-auto relative z-10 shadow-2xl">
+        
+        {/* Log In / Sign Up Selector Switch */}
+        <div className="bg-[#0d1714] border border-[#162a24] p-1.5 rounded-full flex gap-1 mb-6">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('login');
+              setErrorMsg('');
+            }}
+            className={`flex-1 text-center py-3 text-xs font-bold rounded-full transition-all cursor-pointer ${
+              activeTab === 'login' 
+                ? 'bg-[#1ebd7d] text-neutral-950 shadow-md shadow-[#1ebd7d]/10' 
+                : 'text-[#8c9e99] hover:text-white'
+            }`}
+          >
+            Log In
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab('signup');
+              setErrorMsg('');
+            }}
+            className={`flex-1 text-center py-3 text-xs font-bold rounded-full transition-all cursor-pointer ${
+              activeTab === 'signup' 
+                ? 'bg-[#1ebd7d] text-neutral-950 shadow-md shadow-[#1ebd7d]/10' 
+                : 'text-[#8c9e99] hover:text-white'
+            }`}
+          >
+            Sign Up
+          </button>
+        </div>
+
+        {errorMsg && (
+          <div className="mb-4 p-3 bg-red-400/10 border border-red-500/20 text-red-400 rounded-xl text-xs text-center font-bold">
+            {errorMsg}
+          </div>
+        )}
+
+        {/* TAB 1: SIGN UP */}
+        {activeTab === 'signup' && (
+          <form onSubmit={handleSignUp} className="flex-grow flex flex-col justify-between space-y-5">
+            <div className="space-y-4">
+              {/* Feature Grid box */}
+              <div className="border border-[#122822] bg-[#081310]/50 rounded-2xl p-4 grid grid-cols-3 gap-2 text-center">
+                <div>
+                  <div className="w-8 h-8 rounded-full bg-[#1ebd7d]/10 border border-[#1ebd7d]/35 text-[#1ebd7d] flex items-center justify-center mx-auto text-xs font-bold mb-1">
+                    N
+                  </div>
+                  <span className="text-[10px] text-[#8c9e99] font-semibold">Track spend</span>
+                </div>
+                <div>
+                  <div className="w-8 h-8 rounded-full bg-[#1ebd7d]/10 border border-[#1ebd7d]/35 text-[#1ebd7d] flex items-center justify-center mx-auto text-xs font-bold mb-1">
+                    %
+                  </div>
+                  <span className="text-[10px] text-[#8c9e99] font-semibold">Plan limits</span>
+                </div>
+                <div>
+                  <div className="w-8 h-8 rounded-full bg-[#1ebd7d]/10 border border-[#1ebd7d]/35 text-[#1ebd7d] flex items-center justify-center mx-auto text-xs font-bold mb-1">
+                    OK
+                  </div>
+                  <span className="text-[10px] text-[#8c9e99] font-semibold">Save goals</span>
+                </div>
               </div>
 
-              <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight leading-tight text-white font-serif-display">
-                Take absolute control of your finances.
-              </h1>
-
-              <p className="text-[#8c9e99] text-sm md:text-base leading-relaxed font-medium">
-                Flowse delivers a premium, offline-first personal finance tracker. Your data stays entirely on this device. Beautifully secure, private, and fast.
-              </p>
-
-              <div className="pt-4 space-y-3">
+              {/* Email / Phone Method Picker */}
+              <div className="grid grid-cols-2 gap-2">
                 <button
-                  id="onboarding-welcome-next"
-                  onClick={nextStep}
-                  className="w-full py-4 px-6 bg-[#1ebd7d] hover:bg-[#1ab073] active:bg-[#158f5c] text-neutral-900 font-bold rounded-2xl flex items-center justify-center space-x-2 transition-all shadow-xl shadow-[#1ebd7d]/10 group cursor-pointer"
+                  type="button"
+                  onClick={() => setSignUpMethod('email')}
+                  className={`py-3.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                    signUpMethod === 'email'
+                      ? 'border-[#1ebd7d] bg-[#1ebd7d]/10 text-[#1ebd7d]'
+                      : 'border-[#162a24] bg-transparent text-[#8c9e99] hover:text-white'
+                  }`}
                 >
-                  <span>Begin Secure Setup</span>
-                  <ArrowRight size={18} className="translate-x-0 group-hover:translate-x-1 transition-transform" />
+                  <Mail size={14} />
+                  <span>Email</span>
                 </button>
                 <button
-                  onClick={() => {
+                  type="button"
+                  onClick={() => setSignUpMethod('phone')}
+                  className={`py-3.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                    signUpMethod === 'phone'
+                      ? 'border-[#1ebd7d] bg-[#1ebd7d]/10 text-[#1ebd7d]'
+                      : 'border-[#162a24] bg-transparent text-[#8c9e99] hover:text-white'
+                  }`}
+                >
+                  <Phone size={14} />
+                  <span>Phone</span>
+                </button>
+              </div>
+
+              {/* Name fields side-by-side */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-[#8c9e99] uppercase tracking-wider block pl-1">First name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Glory"
+                    value={firstName}
+                    onChange={(e) => {
+                      setFirstName(e.target.value);
+                      setErrorMsg('');
+                    }}
+                    className="w-full bg-[#081310] border border-[#162a24] rounded-2xl py-3.5 px-4 text-white text-xs font-semibold placeholder-[#506e64] focus:outline-none focus:border-[#1ebd7d] focus:ring-1 focus:ring-[#1ebd7d]/40 transition-colors"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-[#8c9e99] uppercase tracking-wider block pl-1">Last name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Adeniran"
+                    value={lastName}
+                    onChange={(e) => {
+                      setLastName(e.target.value);
+                      setErrorMsg('');
+                    }}
+                    className="w-full bg-[#081310] border border-[#162a24] rounded-2xl py-3.5 px-4 text-white text-xs font-semibold placeholder-[#506e64] focus:outline-none focus:border-[#1ebd7d] focus:ring-1 focus:ring-[#1ebd7d]/40 transition-colors"
+                  />
+                </div>
+              </div>
+
+              {/* Email Input */}
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-[#8c9e99] uppercase tracking-wider block pl-1">Email address</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="name@example.com"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
                     setErrorMsg('');
-                    setStep(3);
                   }}
-                  className="w-full py-3.5 px-6 bg-transparent hover:bg-[#12332A]/20 text-[#1ebd7d] border border-[#1ebd7d]/30 font-bold rounded-2xl flex items-center justify-center space-x-2 transition-all cursor-pointer text-xs"
-                >
-                  <span>Restore from Cloud Database</span>
-                </button>
-              </div>
-            </motion.div>
-          )}
-
-          {step === 1 && (
-            <motion.div
-              key="profile"
-              variants={slideVariants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={{ duration: 0.35, ease: 'easeOut' }}
-              className="space-y-6 text-center"
-            >
-              <div className="space-y-2">
-                <span className="text-[#1ebd7d] text-[10px] font-mono tracking-widest font-bold uppercase">Step 1 — Let's get acquainted</span>
-                <h2 className="text-3xl font-extrabold text-white tracking-tight font-sans">Establish Your Profile</h2>
-                <p className="text-[#8c9e99] text-xs leading-relaxed max-w-sm mx-auto">
-                  Every byte of your data is encrypted and saved strictly on this device. We don't use servers or cloud tracking.
-                </p>
+                  className="w-full bg-[#081310] border border-[#162a24] rounded-2xl py-3.5 px-4 text-white text-xs font-semibold placeholder-[#506e64] focus:outline-none focus:border-[#1ebd7d] focus:ring-1 focus:ring-[#1ebd7d]/40 transition-colors"
+                />
               </div>
 
-              {errorMsg && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="p-3 bg-red-400/10 border border-red-500/20 text-red-400 rounded-2xl text-xs font-semibold"
-                >
-                  {errorMsg}
-                </motion.div>
-              )}
-
-              <div className="space-y-4 text-left">
-                {/* Name */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-[#1ebd7d] uppercase tracking-widest block font-sans pl-1">Your Name</label>
+              {/* PIN / Password input side by side */}
+              <div className="grid grid-cols-2 gap-3">
+                {/* 4-digit PIN */}
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-[#8c9e99] uppercase tracking-wider block pl-1">Set 4-Digit PIN</label>
                   <div className="relative">
-                    <User className="absolute left-4 top-1/2 -translate-y-1/2 text-[#1ebd7d]" size={16} />
                     <input
-                      id="onboarding-input-name"
-                      type="text"
-                      className="w-full bg-[#081A15] border border-[#12332A] rounded-2xl py-4 pl-11 pr-4 text-white placeholder-[#506e64] focus:outline-none focus:border-[#1ebd7d] transition-colors font-medium text-xs focus:ring-1 focus:ring-[#1ebd7d]/50"
-                      placeholder="e.g. Eleanor Vance"
-                      value={name}
+                      type={showPin ? 'text' : 'password'}
+                      required
+                      maxLength={4}
+                      pattern="[0-9]*"
+                      inputMode="numeric"
+                      placeholder="••••"
+                      value={pin}
                       onChange={(e) => {
-                        setName(e.target.value);
+                        const val = e.target.value.replace(/\D/g, '');
+                        setPin(val);
                         setErrorMsg('');
                       }}
+                      className="w-full bg-[#081310] border border-[#162a24] rounded-2xl py-3.5 pl-4 pr-10 text-white text-xs font-extrabold tracking-[0.4em] placeholder-[#506e64] focus:outline-none focus:border-[#1ebd7d] focus:ring-1 focus:ring-[#1ebd7d]/40 transition-colors"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPin(!showPin)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#8c9e99] hover:text-[#1ebd7d] cursor-pointer"
+                    >
+                      {showPin ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
                   </div>
                 </div>
 
-                {/* Email */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-[#1ebd7d] uppercase tracking-widest block font-sans pl-1">Email Address</label>
+                {/* Confirm PIN */}
+                <div className="space-y-1">
+                  <label className="text-[9px] font-bold text-[#8c9e99] uppercase tracking-wider block pl-1">Confirm PIN</label>
                   <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-[#1ebd7d]" size={16} />
                     <input
-                      id="onboarding-input-email"
-                      type="email"
-                      className="w-full bg-[#081A15] border border-[#12332A] rounded-2xl py-4 pl-11 pr-4 text-white placeholder-[#506e64] focus:outline-none focus:border-[#1ebd7d] transition-colors font-medium text-xs focus:ring-1 focus:ring-[#1ebd7d]/50"
-                      placeholder="eleanor@example.com"
-                      value={email}
+                      type={showConfirmPin ? 'text' : 'password'}
+                      required
+                      maxLength={4}
+                      pattern="[0-9]*"
+                      inputMode="numeric"
+                      placeholder="••••"
+                      value={confirmPin}
                       onChange={(e) => {
-                        setEmail(e.target.value);
+                        const val = e.target.value.replace(/\D/g, '');
+                        setConfirmPin(val);
                         setErrorMsg('');
                       }}
+                      className="w-full bg-[#081310] border border-[#162a24] rounded-2xl py-3.5 pl-4 pr-10 text-white text-xs font-extrabold tracking-[0.4em] placeholder-[#506e64] focus:outline-none focus:border-[#1ebd7d] focus:ring-1 focus:ring-[#1ebd7d]/40 transition-colors"
                     />
-                  </div>
-                </div>
-
-                {/* Currency */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-[#1ebd7d] uppercase tracking-widest block font-sans pl-1">Preferred Currency Symbol</label>
-                  <select
-                    id="onboarding-input-currency"
-                    className="w-full bg-[#081A15] border border-[#12332A] rounded-2xl py-4 px-4 text-white focus:outline-none focus:border-[#1ebd7d] transition-colors text-xs font-bold cursor-pointer"
-                    value={currency}
-                    onChange={(e) => setCurrency(e.target.value)}
-                  >
-                    <option value="$">US Dollar ($)</option>
-                    <option value="₦">Nigerian Naira (₦)</option>
-                    <option value="£">British Pound (£)</option>
-                    <option value="€">Euro (€)</option>
-                  </select>
-                </div>
-
-                {/* Alerts preference */}
-                <div className="bg-[#081A15] border border-[#12332A] rounded-2xl p-4 flex items-start space-x-3">
-                  <Bell className="text-[#1ebd7d] shrink-0 mt-0.5" size={16} />
-                  <div className="flex-1 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-white">Threshold Overspending Alerts</span>
-                      <button
-                        id="onboarding-notification-toggle"
-                        type="button"
-                        onClick={() => setPhonePref(!phonePref)}
-                        className={`w-10 h-5.5 rounded-full p-0.5 transition-colors duration-200 focus:outline-none cursor-pointer ${
-                          phonePref ? 'bg-[#1ebd7d]' : 'bg-[#12332A]'
-                        }`}
-                      >
-                        <div
-                          className={`bg-white w-4.5 h-4.5 rounded-full shadow transform duration-200 ease-in-out ${
-                            phonePref ? 'translate-x-4.5' : 'translate-x-0'
-                          }`}
-                        />
-                      </button>
-                    </div>
-                    <p className="text-[10px] text-[#8c9e99] leading-relaxed font-semibold">Get beautiful local reminders if you exceed your budget constraints.</p>
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPin(!showConfirmPin)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#8c9e99] hover:text-[#1ebd7d] cursor-pointer"
+                    >
+                      {showConfirmPin ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
                   </div>
                 </div>
               </div>
 
-              <div className="pt-2">
+              {/* Currency Symbol Selection */}
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-[#8c9e99] uppercase tracking-wider block pl-1">Active Currency Symbol</label>
+                <select
+                  value={currency}
+                  onChange={(e) => setCurrency(e.target.value)}
+                  className="w-full bg-[#081310] border border-[#162a24] rounded-2xl py-3.5 px-4 text-white text-xs font-bold focus:outline-none focus:border-[#1ebd7d] cursor-pointer"
+                >
+                  <option value="₦">Nigerian Naira (₦)</option>
+                  <option value="$">US Dollar ($)</option>
+                  <option value="£">British Pound (£)</option>
+                  <option value="€">Euro (€)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="pt-2 space-y-4">
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-4 bg-[#1ebd7d] hover:bg-[#1ab073] disabled:opacity-50 text-neutral-950 font-extrabold rounded-2xl text-xs uppercase tracking-wider transition-all shadow-lg shadow-[#1ebd7d]/10 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>{isLoading ? 'Creating account...' : 'Create account'}</span>
+                {!isLoading && <ArrowRight size={14} />}
+              </button>
+
+              {/* Social Login Divider */}
+              <div className="text-center space-y-3">
+                <span className="text-[10px] text-[#506e64] font-bold uppercase tracking-wider">Or continue with</span>
                 <button
-                  id="onboarding-profile-next"
-                  onClick={nextStep}
-                  className="w-full py-4 bg-[#1ebd7d] hover:bg-[#1ab073] active:bg-[#158f5c] text-neutral-900 font-bold text-xs uppercase tracking-wider rounded-2xl flex items-center justify-center space-x-2 transition-all cursor-pointer shadow-lg shadow-[#1ebd7d]/15"
+                  type="button"
+                  onClick={() => alert("Google Sign-In is not fully configured yet on this Android app package. Please use the form above.")}
+                  className="w-full py-3.5 bg-white hover:bg-neutral-50 text-neutral-900 font-bold rounded-2xl text-xs flex items-center justify-center gap-2 border border-neutral-200 transition-colors cursor-pointer"
                 >
-                  <span>Set Up Secure PIN</span>
-                  <ChevronRight size={14} />
+                  <span className="text-red-500 font-extrabold">G</span>
+                  <span>Google</span>
                 </button>
               </div>
-            </motion.div>
-          )}
+            </div>
+          </form>
+        )}
 
-          {step === 2 && (
-            <motion.div
-              key="security"
-              variants={slideVariants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={{ duration: 0.35, ease: 'easeOut' }}
-              className="space-y-5 flex flex-col items-center"
-            >
-              <div className="text-center space-y-1.5 w-full">
-                <span className="text-[#1ebd7d] text-[10px] font-mono tracking-widest font-bold">PROFILE PIN SECURITY</span>
-                <h2 className="text-2xl font-bold text-white tracking-tight font-serif-display">
-                  {pinStep === 'create' ? 'Set Login PIN' : 'Confirm Login Pin'}
-                </h2>
-                <p className="text-[#8c9e99] text-[11px] leading-relaxed font-semibold max-w-xs mx-auto">
-                  {pinStep === 'create'
-                    ? 'Create a secure 4-digit PIN to access your account privately on this device.'
-                    : 'Please re-enter your 4-digit PIN to confirm.'}
-                </p>
+        {/* TAB 2: LOG IN */}
+        {activeTab === 'login' && (
+          <form onSubmit={handleCloudRestore} className="flex-grow flex flex-col justify-between space-y-6">
+            <div className="space-y-4 pt-4">
+              <div className="text-center py-2">
+                <span className="text-[#1ebd7d] text-[10px] font-mono tracking-widest font-bold uppercase">Safe Wallet Vault</span>
+                <p className="text-[#8c9e99] text-xs font-semibold mt-1">Enter credentials to load synced treasury records.</p>
               </div>
 
-              {errorMsg && (
-                <div className="w-full p-3 bg-red-400/10 border border-red-500/20 text-red-400 rounded-xl text-xs text-center font-bold">
-                  {errorMsg}
+              {/* Email Address */}
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-[#8c9e99] uppercase tracking-wider block pl-1">Email address</label>
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-[#1ebd7d]" size={15} />
+                  <input
+                    type="email"
+                    required
+                    placeholder="name@example.com"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setErrorMsg('');
+                    }}
+                    className="w-full bg-[#081310] border border-[#162a24] rounded-2xl py-3.5 pl-11 pr-4 text-white text-xs font-semibold placeholder-[#506e64] focus:outline-none focus:border-[#1ebd7d] focus:ring-1 focus:ring-[#1ebd7d]/40 transition-colors"
+                  />
                 </div>
-              )}
-
-              {/* Secure dots indicators */}
-              <div className="flex space-x-6 my-2">
-                {[0, 1, 2, 3].map((index) => {
-                  const active = pinStep === 'create' ? index < pin.length : index < confirmPin.length;
-                  return (
-                    <div
-                      key={index}
-                      className={`w-4 h-4 rounded-full border-2 transition-all duration-200 ${
-                        active ? 'bg-[#1ebd7d] border-[#1ebd7d] scale-125 shadow-lg shadow-[#1ebd7d]/35' : 'border-[#12332A] bg-transparent'
-                      }`}
-                    />
-                  );
-                })}
               </div>
 
-              {/* Secure grid keypad */}
-              <div className="w-full max-w-[270px] grid grid-cols-3 gap-3.5 pt-1">
-                {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((num) => (
+              {/* 4-digit PIN */}
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-[#8c9e99] uppercase tracking-wider block pl-1">4-Digit PIN</label>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-[#1ebd7d]" size={15} />
+                  <input
+                    type={showPin ? 'text' : 'password'}
+                    required
+                    maxLength={4}
+                    pattern="[0-9]*"
+                    inputMode="numeric"
+                    placeholder="••••"
+                    value={pin}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '');
+                      setPin(val);
+                      setErrorMsg('');
+                    }}
+                    className="w-full bg-[#081310] border border-[#162a24] rounded-2xl py-3.5 pl-11 pr-10 text-white text-xs font-extrabold tracking-[0.4em] placeholder-[#506e64] focus:outline-none focus:border-[#1ebd7d] focus:ring-1 focus:ring-[#1ebd7d]/40 transition-colors"
+                  />
                   <button
-                    id={`onboarding-keypad-${num}`}
-                    key={num}
-                    onClick={() => handleKeyPress(num)}
-                    className="aspect-square rounded-full bg-[#081A15] hover:bg-[#12332A] active:bg-[#1ebd7d]/20 text-xl font-bold text-white flex items-center justify-center transition-all border border-[#12332A] shadow cursor-pointer"
+                    type="button"
+                    onClick={() => setShowPin(!showPin)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#8c9e99] hover:text-[#1ebd7d] cursor-pointer"
                   >
-                    {num}
+                    {showPin ? <EyeOff size={14} /> : <Eye size={14} />}
                   </button>
-                ))}
-                <div className="aspect-square" />
-                <button
-                  id="onboarding-keypad-0"
-                  onClick={() => handleKeyPress('0')}
-                  className="aspect-square rounded-full bg-[#081A15] hover:bg-[#12332A] active:bg-[#1ebd7d]/20 text-xl font-bold text-white flex items-center justify-center transition-all border border-[#12332A] shadow cursor-pointer"
-                >
-                  0
-                </button>
-                <button
-                  id="onboarding-keypad-delete"
-                  onClick={handleDelete}
-                  className="aspect-square rounded-full bg-[#12332A]/50 hover:bg-[#12332A] active:bg-amber-500/15 text-[#1ebd7d] flex items-center justify-center transition-all border border-[#12332A]/30 text-xs font-bold tracking-widest uppercase cursor-pointer"
-                >
-                  DEL
-                </button>
+                </div>
               </div>
+            </div>
+
+            <div className="pt-8 space-y-4">
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-4 bg-[#1ebd7d] hover:bg-[#1ab073] disabled:opacity-50 text-neutral-950 font-extrabold rounded-2xl text-xs uppercase tracking-wider transition-all shadow-lg shadow-[#1ebd7d]/10 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>{isLoading ? 'Restoring records...' : 'Log In & Sync'}</span>
+                {!isLoading && <ArrowRight size={14} />}
+              </button>
 
               <div className="text-center pt-2">
-                <p className="text-[#1ebd7d] text-[9px] font-mono tracking-widest uppercase font-bold animate-pulse-soft">SHIELDED SAFE ENVIRONMENT</p>
+                <p className="text-[10px] text-[#506e64] font-semibold">Zero-knowledge local security backup active.</p>
               </div>
-            </motion.div>
-          )}
-          {step === 3 && (
-            <motion.div
-              key="restore"
-              variants={slideVariants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={{ duration: 0.35, ease: 'easeOut' }}
-              className="space-y-5 flex flex-col items-center w-full"
-            >
-              <div className="text-center space-y-1.5 w-full">
-                <span className="text-[#1ebd7d] text-[10px] font-mono tracking-widest font-bold">LEDGER CLOUD SYNC</span>
-                <h2 className="text-2xl font-bold text-white tracking-tight font-serif-display">
-                  Restore Ledger State
-                </h2>
-                <p className="text-[#8c9e99] text-[11px] leading-relaxed font-semibold max-w-xs mx-auto">
-                  Enter your email address and 4-digit PIN to download your cloud-backed financial history.
-                </p>
-              </div>
-
-              {errorMsg && (
-                <div className="w-full p-3 bg-red-400/10 border border-red-500/20 text-red-400 rounded-xl text-xs text-center font-bold">
-                  {errorMsg}
-                </div>
-              )}
-
-              <div className="w-full space-y-4 text-left">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold text-[#1ebd7d] uppercase tracking-widest block font-sans pl-1">Email Address</label>
-                  <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-[#1ebd7d]" size={16} />
-                    <input
-                      id="restore-input-email"
-                      type="email"
-                      className="w-full bg-[#081A15] border border-[#12332A] rounded-2xl py-4 pl-11 pr-4 text-white placeholder-[#506e64] focus:outline-none focus:border-[#1ebd7d] transition-colors font-medium text-xs focus:ring-1 focus:ring-[#1ebd7d]/50"
-                      placeholder="eleanor@example.com"
-                      value={email}
-                      onChange={(e) => {
-                        setEmail(e.target.value);
-                        setErrorMsg('');
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Secure dots indicators for login pin */}
-              <div className="flex space-x-6 my-2">
-                {[0, 1, 2, 3].map((index) => {
-                  const active = index < loginPin.length;
-                  return (
-                    <div
-                      key={index}
-                      className={`w-4 h-4 rounded-full border-2 transition-all duration-200 ${
-                        active ? 'bg-[#1ebd7d] border-[#1ebd7d] scale-125 shadow-lg shadow-[#1ebd7d]/35' : 'border-[#12332A] bg-transparent'
-                      }`}
-                    />
-                  );
-                })}
-              </div>
-
-              {/* Secure grid keypad */}
-              <div className="w-full max-w-[270px] grid grid-cols-3 gap-3.5 pt-1">
-                {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((num) => (
-                  <button
-                    id={`restore-keypad-${num}`}
-                    key={num}
-                    onClick={() => handleKeyPress(num)}
-                    className="aspect-square rounded-full bg-[#081A15] hover:bg-[#12332A] active:bg-[#1ebd7d]/20 text-xl font-bold text-white flex items-center justify-center transition-all border border-[#12332A] shadow cursor-pointer"
-                  >
-                    {num}
-                  </button>
-                ))}
-                <button
-                  onClick={() => {
-                    setErrorMsg('');
-                    setStep(0);
-                    setLoginPin('');
-                  }}
-                  className="aspect-square rounded-full bg-[#12332A]/20 hover:bg-[#12332A]/40 active:bg-amber-500/15 text-[#8c9e99] flex items-center justify-center transition-all hover:text-white border border-[#12332A]/30 text-xs font-bold tracking-widest uppercase cursor-pointer"
-                >
-                  BACK
-                </button>
-                <button
-                  id="restore-keypad-0"
-                  onClick={() => handleKeyPress('0')}
-                  className="aspect-square rounded-full bg-[#081A15] hover:bg-[#12332A] active:bg-[#1ebd7d]/20 text-xl font-bold text-white flex items-center justify-center transition-all border border-[#12332A] shadow cursor-pointer"
-                >
-                  0
-                </button>
-                <button
-                  id="restore-keypad-delete"
-                  onClick={handleDelete}
-                  className="aspect-square rounded-full bg-[#12332A]/50 hover:bg-[#12332A] active:bg-amber-500/15 text-[#1ebd7d] flex items-center justify-center transition-all border border-[#12332A]/30 text-xs font-bold tracking-widest uppercase cursor-pointer"
-                >
-                  DEL
-                </button>
-              </div>
-
-              <div className="text-center pt-2">
-                <p className="text-[#1ebd7d] text-[9px] font-mono tracking-widest uppercase font-bold animate-pulse-soft">SECURE LEDGER RESTORE</p>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </div>
+          </form>
+        )}
       </div>
 
       {/* Footer bar */}
-      <div className="relative z-10 w-full max-w-md mx-auto text-center pb-2">
-        <p className="text-[11px] text-[#8c9e99] font-semibold leading-normal">Flowse Ledger Security Console. Zero data tracking telemetry.</p>
+      <div className="relative z-10 w-full max-w-md mx-auto text-center pt-4 pb-2">
+        <p className="text-[10px] text-[#506e64] font-semibold">
+          Flowse Secure Wallet Onboarding. Offline-First Ledgers.
+        </p>
       </div>
     </div>
   );
