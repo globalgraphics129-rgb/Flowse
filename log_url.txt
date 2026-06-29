@@ -1,0 +1,7 @@
+## 🔍 Build Failure Pastebin Logs
+### 📦 Vite Build Log
+https://paste.rs/CAQOc
+### 🔄 Capacitor Sync Log
+https://paste.rs/XwOCd
+### 🤖 Gradle Build Log
+https://paste.rs/QkCNS
