@@ -10,6 +10,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout Source Code
@@ -57,28 +59,32 @@ jobs:
           name: Flowse-Debug-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
 
-      - name: Write Logs to Job Summary on Failure
+      - name: Push Pastebin URLs to debug-logs branch on Failure
         if: failure()
         run: |
-          echo "## 🔍 Build Failure Logs" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔍 Build Failure Pastebin Logs" > log_url.txt
           
           if [ -f vite_build.log ]; then
-            echo "### 📦 Vite Build Log" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            cat vite_build.log >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "### 📦 Vite Build Log" >> log_url.txt
+            curl -s --data-binary @vite_build.log https://paste.rs >> log_url.txt
+            echo "" >> log_url.txt
           fi
           
           if [ -f cap_sync.log ]; then
-            echo "### 🔄 Capacitor Sync Log" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            cat cap_sync.log >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "### 🔄 Capacitor Sync Log" >> log_url.txt
+            curl -s --data-binary @cap_sync.log https://paste.rs >> log_url.txt
+            echo "" >> log_url.txt
           fi
           
           if [ -f android/gradle_build.log ]; then
-            echo "### 🤖 Gradle Build Log" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            cat android/gradle_build.log >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "### 🤖 Gradle Build Log" >> log_url.txt
+            curl -s --data-binary @android/gradle_build.log https://paste.rs >> log_url.txt
+            echo "" >> log_url.txt
           fi
+          
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          git checkout -b debug-logs || (git fetch origin debug-logs && git checkout debug-logs)
+          git add log_url.txt || true
+          git commit -m "debug: dump log URLs on failure" || true
+          git push -f origin debug-logs
