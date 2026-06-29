@@ -68,19 +68,13 @@ export default function App() {
   // Navigation & Screen Control
   const [appBooting, setAppBooting] = useState<boolean>(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [syncServerUrl, setSyncServerUrl] = useState<string>(() => {
-    return localStorage.getItem('flowse_sync_server_url') || '';
-  });
 
   const getApiUrl = (path: string) => {
-    if (syncServerUrl.trim()) {
-      return `${syncServerUrl.trim().replace(/\/$/, '')}/api${path}`;
+    const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (isLocalDev && (window.location.port === '3000' || window.location.port === '5173')) {
+      return `/api${path}`;
     }
-    const isCapacitor = window.location.origin.startsWith('capacitor://') || (window.location.origin.startsWith('http://localhost') && window.location.port === '');
-    if (isCapacitor) {
-      return `http://localhost:5000/api${path}`;
-    }
-    return `/api${path}`;
+    return `https://flowse-six.vercel.app/api${path}`;
   };
 
   // Flowse Modular Theme Preferences (light | dark | system)
@@ -393,16 +387,11 @@ export default function App() {
       budgets: Budget[];
       goals: Goal[];
       recurringTransactions: RecurringTransaction[];
-    },
-    customServerUrlVal?: string
+    }
   ) => {
     setProfile(completedProfile);
     setPinVerified(true);
     localStorage.setItem('flowse_profile_react', JSON.stringify(completedProfile));
-    if (customServerUrlVal) {
-      setSyncServerUrl(customServerUrlVal);
-      localStorage.setItem('flowse_sync_server_url', customServerUrlVal);
-    }
     
     if (restoredData) {
       updateTransactionsList(restoredData.transactions);
@@ -639,7 +628,7 @@ export default function App() {
     reader.readAsText(file);
   };
 
-  const handleProfileSave = (nameInput: string, emailInput: string, currencyInput: string, notifyInput: boolean, syncServerInput?: string) => {
+  const handleProfileSave = (nameInput: string, emailInput: string, currencyInput: string, notifyInput: boolean) => {
     if (!profile) return;
     const updated: UserProfile = {
       ...profile,
@@ -650,10 +639,6 @@ export default function App() {
     };
     setProfile(updated);
     localStorage.setItem('flowse_profile_react', JSON.stringify(updated));
-    if (syncServerInput !== undefined) {
-      setSyncServerUrl(syncServerInput);
-      localStorage.setItem('flowse_sync_server_url', syncServerInput);
-    }
     alert('Configuration saved successfully!');
   };
 
@@ -1913,8 +1898,7 @@ export default function App() {
                         const eInput = (form.elements.namedItem('p_email') as HTMLInputElement).value;
                         const cInput = (form.elements.namedItem('p_curr') as HTMLSelectElement).value;
                         const nToggle = (form.elements.namedItem('p_notify') as HTMLInputElement).checked;
-                        const sInput = (form.elements.namedItem('p_sync_server') as HTMLInputElement).value;
-                        handleProfileSave(nInput, eInput, cInput, nToggle, sInput);
+                        handleProfileSave(nInput, eInput, cInput, nToggle);
                       }}
                       className="space-y-4 text-natural-text"
                     >
@@ -1940,17 +1924,6 @@ export default function App() {
                             className="w-full bg-natural border border-border-soft rounded-xl p-3 text-xs text-natural-text focus:outline-none focus:border-sage font-bold"
                           />
                         </div>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-sage uppercase tracking-widest block font-mono">📡 Cloud Sync Server URL</label>
-                        <input 
-                          name="p_sync_server"
-                          type="url" 
-                          defaultValue={syncServerUrl}
-                          placeholder="https://your-flowse-server.com (Optional)"
-                          className="w-full bg-natural border border-border-soft rounded-xl p-3 text-xs text-natural-text focus:outline-none focus:border-sage font-bold"
-                        />
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
