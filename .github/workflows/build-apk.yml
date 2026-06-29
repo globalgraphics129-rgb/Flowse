@@ -39,7 +39,7 @@ jobs:
 
       - name: Sync Capacitor Plugins and Assets
         run: |
-          npx cap sync --verbose > cap_sync.log 2>&1 || (cat cap_sync.log && exit 1)
+          npx cap sync > cap_sync.log 2>&1 || (cat cap_sync.log && exit 1)
           cat cap_sync.log
 
       - name: Set up Gradle Cache
